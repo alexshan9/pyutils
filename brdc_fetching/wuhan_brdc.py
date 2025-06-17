@@ -29,7 +29,7 @@ def download_wuhan_brdc(date_str, save_dir='downloads'):
         url = f"ftp://igs.gnsswhu.cn/pub/gps/data/daily/{year}/brdc/{file_name}"
         
         # 重命名模式：brdm + doy + year_short + .p.gz
-        renamed_file = f"brdm{doy:03d}{year_short}.p.gz"
+        renamed_file = f"brdm{doy:03d}0.{year_short}p.gz"
         
         # 创建保存目录
         os.makedirs(save_dir, exist_ok=True)

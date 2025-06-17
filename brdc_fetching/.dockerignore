@@ -1,0 +1,28 @@
+# 排除不必要的文件
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.log
+.git/
+.gitignore
+*.md
+brdc/
+data/
+downloads/
+test_*/
+
+# Docker相关文件
+docker-compose.yml
+.dockerignore
+
+# IDE和编辑器文件
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 操作系统文件
+.DS_Store
+Thumbs.db 
