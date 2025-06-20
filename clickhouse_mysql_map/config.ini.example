@@ -1,0 +1,28 @@
+[clickhouse]
+host = 192.168.10.129
+port = 9000
+database = abc
+user = root
+password = 123456
+
+[mysql]
+host = 192.168.10.129
+port = 9527
+database = abc
+user = root
+password = 123456
+charset = utf8mb4
+
+[settings]
+# 批量插入的批次大小
+batch_size = 100
+# 是否显示详细日志
+verbose = True
+# 如果表结构不匹配是否自动删除重建
+auto_recreate_table = True
+# 是否启用数据一致性验证 (V3新功能)
+enable_validation = True
+# 验证时检查的样本数据行数 (V3新功能)
+validation_sample_size = 5
+# 如果表已存在是否跳过处理 (默认false，即不跳过)
+skip_existing_tables = True 

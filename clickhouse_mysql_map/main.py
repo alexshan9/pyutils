@@ -246,16 +246,25 @@ class ClickHouseClientV3:
             print(f"删除表失败: {e}")
     
     def create_table(self, table_name: str, fields: List[Tuple[str, str, str]], table_comment: str = ""):
-        """创建ClickHouse表，包含自增ID和备注"""
+        """创建ClickHouse表，使用第一个字段作为主键"""
         try:
             # 构建字段定义
-            field_definitions = ["id UInt64 COMMENT '自增主键'"]
+            field_definitions = []
+            primary_key_field = None
             
             for field_name, field_type, comment in fields:
                 if comment:
                     field_definitions.append(f"`{field_name}` {field_type} COMMENT '{comment}'")
                 else:
                     field_definitions.append(f"`{field_name}` {field_type}")
+                
+                # 使用第一个字段作为主键
+                if primary_key_field is None:
+                    primary_key_field = field_name
+            
+            # 如果没有字段，使用默认主键
+            if primary_key_field is None:
+                raise Exception("表必须至少包含一个字段")
             
             fields_sql = ',\n    '.join(field_definitions)
             
@@ -266,31 +275,26 @@ class ClickHouseClientV3:
             CREATE TABLE `{table_name}` (
                 {fields_sql}
             ) ENGINE = MergeTree()
-            ORDER BY id
+            ORDER BY `{primary_key_field}`
             {table_comment_sql}
             """
             
             self.client.execute(create_sql)
-            print(f"✓ 成功创建表: {table_name}")
+            print(f"✓ 成功创建表: {table_name}，主键字段: {primary_key_field}")
             
         except Exception as e:
             raise Exception(f"创建表失败: {e}")
     
-    def insert_batch_with_auto_id(self, table_name: str, field_names: List[str], data_batch: List[List[Any]], field_types: List[str] = None):
-        """批量插入数据，自动生成递增ID"""
+    def insert_batch(self, table_name: str, field_names: List[str], data_batch: List[List[Any]], field_types: List[str] = None):
+        """批量插入数据，使用原始MySQL数据"""
         try:
-            # 获取当前最大ID
-            max_id_result = self.client.execute(f"SELECT COALESCE(MAX(id), 0) FROM `{table_name}`")
-            current_max_id = max_id_result[0][0]
-            
             # print(f"  🔍 开始处理批次数据，行数: {len(data_batch)}, 字段数: {len(field_names)}")
             # if field_types:
             #     print(f"  🔍 字段类型: {dict(zip(field_names, field_types))}")
             
-            # 为每行数据添加递增ID并处理NULL值和类型转换
-            data_with_id = []
+            # 处理NULL值和类型转换，不添加自增ID
+            processed_data = []
             for i, row in enumerate(data_batch):
-                new_id = current_max_id + i + 1
                 # 处理每个字段的值
                 processed_row = []
                 for j, value in enumerate(row):
@@ -316,32 +320,32 @@ class ClickHouseClientV3:
                         default_value = self._get_default_value_for_type(field_type if field_types and j < len(field_types) else "String")
                         processed_row.append(default_value)
                 
-                data_with_id.append([new_id] + processed_row)
+                processed_data.append(processed_row)
             
             # 插入数据
-            insert_fields = ['id'] + field_names
+            insert_fields = field_names
             # print(f"  🔍 准备插入数据: 表={table_name}, 字段={insert_fields}")
             
             # 增加详细的插入前检查
-            # if data_with_id:
+            # if processed_data:
                 # print(f"  🔍 即将插入的数据样本（前2行）:")
-                # for i, row in enumerate(data_with_id[:2]):
+                # for i, row in enumerate(processed_data[:2]):
                 #     print(f"    行{i+1}: {[type(val).__name__ + ':' + repr(val)[:50] + ('...' if len(repr(val)) > 50 else '') for val in row]}")
             
             try:
                 self.client.execute(
                     f"INSERT INTO `{table_name}` ({', '.join(f'`{field}`' for field in insert_fields)}) VALUES",
-                    data_with_id
+                    processed_data
                 )
-                # print(f"  ✓ 成功插入 {len(data_with_id)} 行数据")
+                # print(f"  ✓ 成功插入 {len(processed_data)} 行数据")
             except Exception as insert_error:
                 print(f"  ❌ ClickHouse插入详细错误: {insert_error}")
                 print(f"  🔍 错误类型: {type(insert_error).__name__}")
-                # print(f"  ✓ 成功插入 {len(data_with_id)} 行数据")
+                # print(f"  ✓ 成功插入 {len(processed_data)} 行数据")
                 
                 # 尝试逐行插入以定位问题行
                 print(f"  🔍 尝试逐行插入以定位问题...")
-                for i, row in enumerate(data_with_id[:5]):  # 只检查前5行
+                for i, row in enumerate(processed_data[:5]):  # 只检查前5行
                     try:
                         self.client.execute(
                             f"INSERT INTO `{table_name}` ({', '.join(f'`{field}`' for field in insert_fields)}) VALUES",
@@ -369,8 +373,8 @@ class ClickHouseClientV3:
             # 打印第一行数据用于调试
             if data_batch:
                 print(f"  🔍 第一行原始数据: {data_batch[0]}")
-                if 'data_with_id' in locals() and data_with_id:
-                    print(f"  🔍 第一行处理后数据: {data_with_id[0]}")
+                if 'processed_data' in locals() and processed_data:
+                    print(f"  🔍 第一行处理后数据: {processed_data[0]}")
             raise Exception(f"批量插入数据失败: {e}")
     
     def _get_default_value_for_type(self, field_type: str):
@@ -656,11 +660,6 @@ class DataMigrator:
                 if mysql_field in table_mapping.field_mappings:
                     clickhouse_field, _ = table_mapping.field_mappings[mysql_field]
                     
-                    # 忽略CSV映射中的id字段，避免与自动生成的ID字段冲突
-                    if clickhouse_field.lower() == 'id':
-                        print(f"⚠ 忽略CSV映射中的id字段: {mysql_field} -> {clickhouse_field}")
-                        continue
-                    
                     clickhouse_type = TypeMapper.map_mysql_type_to_clickhouse(mysql_type)
                     clickhouse_fields.append((clickhouse_field, clickhouse_type, mysql_comment))
                     final_field_mappings[mysql_field] = (clickhouse_field, clickhouse_type)
@@ -715,7 +714,7 @@ class DataMigrator:
                 # 插入到ClickHouse，只包含最终映射的字段
                 clickhouse_field_names = [final_field_mappings[field][0] for field, _, _ in mysql_structure if field in final_field_mappings]
                 clickhouse_field_types = [final_field_mappings[field][1] for field, _, _ in mysql_structure if field in final_field_mappings]
-                self.clickhouse_client.insert_batch_with_auto_id(
+                self.clickhouse_client.insert_batch(
                     table_mapping.clickhouse_table,
                     clickhouse_field_names,
                     mapped_data,
