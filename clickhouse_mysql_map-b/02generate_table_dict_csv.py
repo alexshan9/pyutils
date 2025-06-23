@@ -87,7 +87,7 @@ class MySQLTableDescGenerator:
         
         return table_descriptions
     
-    def generate_csv(self, output_file: str = 'mysql_table_desc_dict.csv'):
+    def generate_csv(self, output_file: str = 'table_dict_raw.csv'):
         """生成CSV文件"""
         try:
             # 获取表描述数据

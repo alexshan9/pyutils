@@ -56,7 +56,7 @@ class MySQLColumnDescGenerator:
         except Exception as e:
             raise Exception(f"获取字段列表失败: {e}")
     
-    def generate_csv(self, output_file: str = 'column_dict.csv'):
+    def generate_csv(self, output_file: str = 'column_dict_raw.csv'):
         """生成字段字典CSV文件"""
         try:
             # 获取所有字段信息

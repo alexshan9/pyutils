@@ -16,7 +16,11 @@ from datetime import datetime
 
 def setup_logging():
     """设置日志记录"""
-    log_filename = f"clickhouse_file_organizer_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    # 确保 logs 目录存在
+    log_dir = Path('logs')
+    log_dir.mkdir(exist_ok=True)
+    
+    log_filename = log_dir / f"clickhouse_file_organizer_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',

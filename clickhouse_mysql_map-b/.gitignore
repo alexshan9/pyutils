@@ -1,0 +1,7 @@
+archive
+clickhouse_mapper
+mysql_scan
+logs/*.log
+*.txt
+*.ini
+*.csv

@@ -750,7 +750,7 @@ class DataMigrator:
                 processing_time=(datetime.now() - start_time).total_seconds()
             )
     
-    def migrate_all_tables(self, csv_directory: str = ".") -> List[MigrationResult]:
+    def migrate_all_tables(self, csv_directory: str = "./clickhouse_mapper") -> List[MigrationResult]:
         """迁移所有CSV配置的表"""
         csv_files = [f for f in os.listdir(csv_directory) if f.endswith('.csv')]
         
