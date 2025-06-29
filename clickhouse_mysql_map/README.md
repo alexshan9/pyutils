@@ -1,3 +1,9 @@
+## 项目概述
+实现从mysql 数据库 -> click house 表的迁移。可自定义映射的表名 和 字段名,批量处理。维护了 table_dcit,column_dict 作为映射的依据
+
+table_dcit: 映射表
+column_dict：映射字段
+
 ## 运行方式：
 1. 正确配置config.ini，看文件末尾
 
