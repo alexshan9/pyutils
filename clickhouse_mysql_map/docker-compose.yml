@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  clickhouse-mysql-map:
+    # 使用当前目录的Dockerfile构建镜像
+    image: clickhouse_mapper:latest
+    # 容器名称
+    container_name: clickhouse-mysql-map-container
+    volumes:
+      - ./main.py:/app/main.py
+      - ./generate_column_dict_csv.py:/app/generate_column_dict_csv.py
+      - ./generate_table_dict_csv.py:/app/generate_table_dict_csv.py
+      - ./column_rename.py:/app/column_rename.py
+      - ./table_mapper.py:/app/table_mapper.py
+      - ./column_dict.csv:/app/column_dict.csv
+      - ./table_dict.csv:/app/table_dict.csv
+      - ./table_dict_raw.csv:/app/table_dict_raw.csv
+      - ./column_dict_raw.csv:/app/column_dict_raw.csv
+      - ./ignore_table.txt:/app/ignore_table.txt # 忽略的表
+      - ./target_table.txt:/app/target_table.txt # 目标表
+      - ./config.ini:/app/config.ini
+

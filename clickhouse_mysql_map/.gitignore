@@ -5,3 +5,7 @@ logs/*.log
 *.txt
 *.ini
 *.csv
+logs
+mysql_column_mapper
+backup
+*.tar

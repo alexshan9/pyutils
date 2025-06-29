@@ -18,6 +18,15 @@ from datetime import datetime
 import pandas as pd
 from dataclasses import dataclass
 
+# 导入前置处理模块
+try:
+    from generate_column_dict_csv import MySQLColumnDescGenerator
+    from generate_table_dict_csv import MySQLTableDescGenerator
+    import column_rename
+    import table_mapper
+except ImportError as e:
+    print(f"⚠ 导入前置处理模块失败，请确认是否存在: {e}")
+
 
 @dataclass
 class TableMapping:
@@ -573,22 +582,126 @@ class ClickHouseClientV3:
             pass
 
 
+def run_preprocessing(run_mode: int) -> bool:
+    """
+    根据 run_mode 执行前置处理逻辑
+    
+    Args:
+        run_mode (int): 运行模式 (0=收集阶段, 1=整理阶段)
+        
+    Returns:
+        bool: 处理是否成功
+    """
+    print(f"\n🔄 开始执行前置处理 (run_mode={run_mode})")
+    print("=" * 60)
+    
+    try:
+        if run_mode == 0:
+            # 收集阶段：运行 01、02 文件
+            print("📊 执行收集阶段处理...")
+            
+            # 执行 01 - 生成字段字典
+            print("\n1️⃣ 生成字段字典文件...")
+            if MySQLColumnDescGenerator is None:
+                print("❌ MySQLColumnDescGenerator 未正确导入，跳过字段字典生成")
+                return False
+                
+            try:
+                generator_01 = MySQLColumnDescGenerator()
+                generator_01.connect()
+                generator_01.generate_csv()
+                generator_01.close()
+                print("✓ 字段字典文件生成完成")
+            except Exception as e:
+                print(f"❌ 生成字段字典失败: {e}")
+                return False
+            
+            # 执行 02 - 生成表字典
+            print("\n2️⃣ 生成表字典文件...")
+            if MySQLTableDescGenerator is None:
+                print("❌ MySQLTableDescGenerator 未正确导入，跳过表字典生成")
+                return False
+                
+            try:
+                generator_02 = MySQLTableDescGenerator()
+                generator_02.connect()
+                generator_02.generate_csv()
+                generator_02.close()
+                print("✓ 表字典文件生成完成")
+            except Exception as e:
+                print(f"❌ 生成表字典失败: {e}")
+                return False
+                
+            print("\n✓ 收集阶段处理完成！")
+            print("📝 提示：请检查生成的 column_dict_raw.csv 和 table_dict_raw.csv 文件")
+            print("📝 下一步：编辑这些文件后，将 run_mode 设置为 1 执行整理阶段")
+            
+        elif run_mode == 1:
+            # 整理阶段：运行 03、04 文件
+            print("🗂 执行整理阶段处理...")
+            
+            # 执行 03 - 列名映射处理
+            print("\n3️⃣ 执行列名映射处理...")
+            if column_rename is None:
+                print("❌ column_rename 模块未正确导入，跳过列名映射处理")
+                return False
+                
+            try:
+                stats_03 = column_rename.process_all_tables()
+                print(f"✓ 列名映射处理完成 - 处理了 {stats_03['processed_tables']} 个表")
+            except Exception as e:
+                print(f"❌ 列名映射处理失败: {e}")
+                return False
+            
+            # 执行 04 - 文件整理
+            print("\n4️⃣ 执行文件整理...")
+            if table_mapper is None:
+                print("❌ table_mapper 模块未正确导入，跳过文件整理")
+                return False
+                
+            try:
+                stats_04 = table_mapper.process_all_files()
+                print(f"✓ 文件整理完成 - 处理了 {stats_04['success_files']} 个文件")
+            except Exception as e:
+                print(f"❌ 文件整理失败: {e}")
+                return False
+                
+            print("\n✓ 整理阶段处理完成！")
+            print("📝 提示：现在可以执行数据迁移主流程")
+            
+        else:
+            print(f"⚠ 无效的 run_mode 值: {run_mode}")
+            print("📝 提示：run_mode 应该为 0（收集阶段）或 1（整理阶段）")
+            return False
+            
+        return True
+        
+    except Exception as e:
+        print(f"❌ 前置处理过程中发生未预期的错误: {e}")
+        return False
+
+
 class DataMigrator:
-    """数据迁移协调器"""
+    """数据迁移器V3"""
     
     def __init__(self, config_file: str = 'config.ini'):
+        """初始化迁移器"""
         self.config = configparser.ConfigParser()
         self.config.read(config_file, encoding='utf-8')
         
-        # 初始化客户端
+        # 读取配置
+        self.batch_size = self.config.getint('settings', 'batch_size', fallback=100)
+        self.verbose = self.config.getboolean('settings', 'verbose', fallback=True)
+        self.auto_recreate = self.config.getboolean('settings', 'auto_recreate_table', fallback=True)
+        self.enable_validation = self.config.getboolean('settings', 'enable_validation', fallback=True)
+        self.validation_sample_size = self.config.getint('settings', 'validation_sample_size', fallback=5)
+        self.skip_existing = self.config.getboolean('settings', 'skip_existing_tables', fallback=False)
+        # 读取 run_mode 配置
+        self.run_mode = self.config.getint('settings', 'run_mode', fallback=0)
+        
         self.mysql_client = None
         self.clickhouse_client = None
         self.csv_loader = CSVMappingLoader()
-        
-        # 配置参数
-        self.batch_size = self.config.getint('settings', 'batch_size', fallback=1000)
-        self.auto_recreate = self.config.getboolean('settings', 'auto_recreate_table', fallback=True)
-        self.skip_existing = self.config.getboolean('settings', 'skip_existing_tables', fallback=False)
     
     def connect_databases(self):
         """连接数据库"""
@@ -810,6 +923,28 @@ def main():
     migrator = DataMigrator()
     
     try:
+        # 执行前置处理逻辑
+        preprocessing_success = run_preprocessing(migrator.run_mode)
+        
+        if not preprocessing_success:
+            print("\n⚠ 前置处理未成功完成")
+            if migrator.run_mode == 0:
+                print("📝 收集阶段处理失败，请检查配置和数据库连接")
+                return
+            elif migrator.run_mode == 1:
+                print("📝 整理阶段处理失败，请检查必要的字典文件是否存在")
+                print("📝 提示：确保已完成收集阶段 (run_mode=0) 并准备好相关字典文件")
+                return
+        
+        # 根据 run_mode 决定是否继续执行数据迁移
+        if migrator.run_mode == 0:
+            print("\n🏁 收集阶段已完成，程序结束")
+            print("📝 下一步请编辑生成的字典文件，然后设置 run_mode=1 执行整理阶段")
+            return
+        elif migrator.run_mode == 1:
+            print(f"\n🚀 前置处理完成，开始执行数据迁移主流程...")
+            print("="*50)
+        
         # 连接数据库
         print("正在连接数据库...")
         migrator.connect_databases()
