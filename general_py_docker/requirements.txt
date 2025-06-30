@@ -1,0 +1,4 @@
+pandas
+sqlalchemy
+clickhouse_sqlalchemy
+flask

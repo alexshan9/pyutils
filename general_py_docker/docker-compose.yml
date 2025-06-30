@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  general_py_docker:
+    # 使用当前目录的Dockerfile构建镜像
+    image: general_py_docker:latest
+    # 容器名称
+    container_name: general_py_docker-container
+    # 挂载代码
+    volumes:
+      - ./main.py:/app/main.py
+    # 端口映射
+    ports:
+      - 5000:5000
+
