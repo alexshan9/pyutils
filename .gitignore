@@ -4,3 +4,5 @@ test**
 __pycache__
 ephe**
 *.zip
+sapimouse/
+.idea
